@@ -1,0 +1,20 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.DotSettings.user
+
+## EF migrations - keep source, ignore compiled output
+# (migrations are committed)
+
+## Node / React
+node_modules/
+dist/
+.env
+.env.local
+
+## OS
+.DS_Store
+Thumbs.db
