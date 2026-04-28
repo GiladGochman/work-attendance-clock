@@ -3,7 +3,8 @@
     "allow": [
       "PowerShell(& \"C:\\\\Program Files\\\\dotnet\\\\dotnet.exe\" --version; & \"C:\\\\Program Files\\\\dotnet\\\\dotnet.exe\" --list-sdks)",
       "PowerShell(npm *)",
-      "Bash(dotnet test *)"
+      "Bash(dotnet test *)",
+      "PowerShell(netstat -ano)"
     ]
   }
 }

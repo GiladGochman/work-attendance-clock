@@ -1,292 +1,169 @@
-# WorkClock — Employee Attendance System
+# WorkClock — Employee Attendance Tracker
 
-A full-stack work clock system that lets employees clock in and out of shifts. Clock times are sourced from an **external time API** (`timeapi.io`, Europe/Zurich zone) — never from the browser or local server clock — to prevent tampering.
+A full-stack attendance tracking system built with **React 18**, **ASP.NET Core 10**, and **MS SQL Server**.
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────────┐        HTTP/JSON        ┌──────────────────────┐
-│   React Frontend    │ ◄─────────────────────► │  ASP.NET Core API    │
-│   (port 5173)       │                         │  (port 5000)         │
-└─────────────────────┘                         └──────────┬───────────┘
-                                                           │ EF Core
-                                                           ▼
-                                                ┌──────────────────────┐
-                                                │  SQL Server          │
-                                                │  (WorkClockDb)       │
-                                                └──────────────────────┘
-                                                           
-                                          ┌────────────────────────────┐
-                                          │  timeapi.io (external)     │
-                                          │  /api/v1/time/current/zone │
-                                          └────────────────────────────┘
+┌────────────────────────┐     HTTP/JSON     ┌──────────────────────────┐
+│  React + Vite          │ ◄───────────────► │  ASP.NET Core 10 Web API │
+│  (localhost:5173)      │                   │  (localhost:7000)        │
+└────────────────────────┘                   └───────────┬──────────────┘
+                                                         │ EF Core 8
+                                                         ▼
+                                             ┌──────────────────────────┐
+                                             │  SQL Server 2022         │
+                                             │  WorkClockDb             │
+                                             └──────────────────────────┘
+
+                                     ┌───────────────────────────────────┐
+                                     │  timeapi.io  (external time API)  │
+                                     │  GET /api/v1/time/current/zone    │
+                                     └───────────────────────────────────┘
 ```
 
-**Key design decisions:**
-
-- **External time source** — `TimeService` calls timeapi.io for every clock event. A `TimeServiceException` is surfaced as `503 Service Unavailable` so the client can show a meaningful error rather than recording a wrong time.
-- **UTC storage** — all timestamps are stored as UTC in `datetime2` columns. The frontend converts to local/Zurich time for display.
-- **Idempotency guards** — clocking in while already in, or clocking out while already out, returns `409 Conflict`.
-- **Audit trail** — the client IP is recorded on every clock-in for compliance purposes.
-
----
-
-## Prerequisites
-
-| Tool | Version | Notes |
-|---|---|---|
-| [.NET SDK](https://dotnet.microsoft.com/download) | 10.0+ | `dotnet --version` to check |
-| [SQL Server](https://www.microsoft.com/en-us/sql-server/sql-server-downloads) | 2019+ or LocalDB | LocalDB ships with Visual Studio |
-| [Node.js](https://nodejs.org/) | 18+ | For the React frontend |
-
----
-
-## Backend Setup & Run
-
-### 1. Clone and restore
-
-```bash
-git clone <repo-url>
-cd "dotnet work clock"
-dotnet restore
-```
-
-### 2. Configure the database connection
-
-Open [WorkClock.Api/appsettings.json](WorkClock.Api/appsettings.json). The default connection string uses Windows Authentication on `localhost`:
-
-```json
-"ConnectionStrings": {
-  "DefaultConnection": "Server=localhost;Database=WorkClockDb;Trusted_Connection=True;TrustServerCertificate=True;"
-}
-```
-
-If you use SQL Server Express or LocalDB, change it to:
-
-```json
-"DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=WorkClockDb;Trusted_Connection=True;"
-```
-
-### 3. Run the API
-
-```bash
-dotnet run --project WorkClock.Api/WorkClock.Api.csproj
-```
-
-On first run the app automatically applies EF Core migrations and creates the `WorkClockDb` database. You should see:
+### Project layout
 
 ```
-info: Microsoft.Hosting.Lifetime[14]
-      Now listening on: http://localhost:5000
-info: Microsoft.Hosting.Lifetime[0]
-      Application started.
-```
-
-> **No SQL Server?** The API will still start and Swagger will load; only the clock endpoints will fail until a database is available.
-
-### 4. Explore the API in Swagger
-
-Open **http://localhost:5000/swagger** in your browser.
-
-You will see four endpoints:
-
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/clock/in` | Clock an employee in |
-| `POST` | `/api/clock/out` | Clock an employee out |
-| `GET` | `/api/clock/status/{employeeId}` | Current status for an employee |
-| `GET` | `/api/clock/history/{employeeId}` | Full attendance history |
-
----
-
-## Testing the API Manually
-
-### Clock in
-
-```bash
-curl -X POST http://localhost:5000/api/clock/in \
-  -H "Content-Type: application/json" \
-  -d '{"employeeId": "EMP001"}'
-```
-
-**Expected response (201 Created):**
-```json
-{
-  "id": 1,
-  "employeeId": "EMP001",
-  "clockInUtc": "2026-04-27T09:00:00Z",
-  "clockOutUtc": null,
-  "status": "ClockedIn"
-}
-```
-
-### Clock out
-
-```bash
-curl -X POST http://localhost:5000/api/clock/out \
-  -H "Content-Type: application/json" \
-  -d '{"employeeId": "EMP001"}'
-```
-
-**Expected response (200 OK):**
-```json
-{
-  "id": 1,
-  "employeeId": "EMP001",
-  "clockInUtc": "2026-04-27T09:00:00Z",
-  "clockOutUtc": "2026-04-27T17:00:04Z",
-  "status": "ClockedOut"
-}
-```
-
-### Check status
-
-```bash
-curl http://localhost:5000/api/clock/status/EMP001
-```
-
-### View history
-
-```bash
-curl http://localhost:5000/api/clock/history/EMP001
-```
-
-### Edge cases to try
-
-| Scenario | How to trigger | Expected result |
-|---|---|---|
-| Clock in twice | Call `/api/clock/in` for the same `employeeId` twice | Second call returns `409 Conflict` |
-| Clock out without clocking in | Call `/api/clock/out` with a fresh `employeeId` | Returns `409 Conflict` |
-| Empty employee ID | Send `{"employeeId": ""}` | Returns `400 Bad Request` |
-
----
-
-## Running the Unit Tests
-
-```bash
-dotnet test WorkClock.Tests/WorkClock.Tests.csproj --logger "console;verbosity=normal"
-```
-
-**No SQL Server or internet connection is required** — tests use an EF Core in-memory database and a mocked HTTP client.
-
-You should see output similar to:
-
-```
-Passed!  - Failed: 0, Passed: 19, Skipped: 0, Total: 19
-```
-
-### Test coverage summary
-
-| Test class | What it covers |
-|---|---|
-| `TimeServiceTests` | Happy-path UTC conversion, network failure, timeout, non-200 HTTP, invalid JSON, missing `date_time` field, unparseable date value |
-| `ClockControllerTests` | Clock-in success/already-in/empty-id/time-service-down, clock-out success/not-in/already-out/time-service-down, status (in/out/not-found/most-recent), history (filtered by employee, ordered newest-first, empty) |
-
-To run with code coverage:
-
-```bash
-dotnet test WorkClock.Tests/WorkClock.Tests.csproj --collect:"XPlat Code Coverage"
+WorkClock.sln
+├── WorkClock.Api/
+│   ├── Controllers/        AttendanceController.cs
+│   ├── Data/               AppDbContext.cs
+│   ├── Dtos/               ClockRequestDto.cs  AttendanceRecordDto.cs
+│   ├── Exceptions/         TimeServiceException.cs
+│   ├── Migrations/         EF Code-First migration
+│   ├── Models/             AttendanceRecord.cs
+│   ├── Services/           ITimeService.cs  TimeService.cs
+│   ├── Program.cs
+│   └── appsettings.json
+└── workclock-frontend/
+    ├── src/
+    │   ├── components/     ClockControls.jsx  AttendanceTable.jsx
+    │   ├── services/       api.js
+    │   ├── App.jsx
+    │   └── main.jsx
+    ├── vite.config.js
+    └── package.json
 ```
 
 ---
 
-## Frontend Setup & Run
+## Getting Started
 
-> The React frontend lives in the `work-clock-ui/` directory.
+### Prerequisites
+
+| Tool                                                      | Min version |
+| --------------------------------------------------------- | ----------- |
+| [.NET SDK](https://dotnet.microsoft.com/download)         | 10.0        |
+| [Node.js](https://nodejs.org/)                            | 18          |
+| [Docker](https://www.docker.com/products/docker-desktop/) | any recent  |
+
+### 1 — Start SQL Server (Docker)
 
 ```bash
-cd work-clock-ui
+docker compose up -d
+```
+
+Starts SQL Server 2022 Developer on `localhost:1433`.  
+Credentials: `sa` / `WorkClock@2024!`
+
+> If you have a local SQL Server instance, update the connection string in
+> `WorkClock.Api/appsettings.json` to point to it instead.
+
+### 2 — Run the API
+
+```bash
+cd WorkClock.Api
+dotnet run
+```
+
+On first start the API automatically applies the EF Core migration and creates the database.  
+Swagger UI → `https://localhost:5000/swagger`
+
+### 3 — Run the Frontend
+
+```bash
+cd workclock-frontend
 npm install
 npm run dev
 ```
 
-Open **http://localhost:5173** in your browser.
-
-### What the UI looks like
-
-**Main screen — employee not clocked in:**
-
-```
-┌────────────────────────────────────────┐
-│           Work Clock                   │
-│                                        │
-│  Employee ID:  [ EMP001          ]     │
-│                                        │
-│         [ Clock In ]                   │
-│                                        │
-│  Status: Not clocked in                │
-└────────────────────────────────────────┘
-```
-
-**After clocking in:**
-
-```
-┌────────────────────────────────────────┐
-│           Work Clock                   │
-│                                        │
-│  Employee ID:  [ EMP001          ]     │
-│                                        │
-│         [ Clock Out ]                  │
-│                                        │
-│  Status:  ● Clocked in                 │
-│  Since:   09:02:14 (Europe/Zurich)     │
-└────────────────────────────────────────┘
-```
-
-**After clocking out:**
-
-```
-┌────────────────────────────────────────┐
-│           Work Clock                   │
-│                                        │
-│  Employee ID:  [ EMP001          ]     │
-│                                        │
-│         [ Clock In ]                   │
-│                                        │
-│  Status:  ○ Clocked out                │
-│  Duration: 7 h 58 m                    │
-└────────────────────────────────────────┘
-```
-
-**Error — time service unavailable:**
-
-```
-┌────────────────────────────────────────┐
-│  ⚠ Could not record clock time.        │
-│  The external time service is          │
-│  temporarily unavailable. Please       │
-│  try again in a moment.                │
-└────────────────────────────────────────┘
-```
+Open **http://localhost:5173**.  
+Vite proxies `/api/*` to the ASP.NET Core backend — no manual CORS setup needed.
 
 ---
 
-## Project Structure
+## API Reference
 
+| Method | Path                                        | Body                         | Description                |
+| ------ | ------------------------------------------- | ---------------------------- | -------------------------- |
+| `POST` | `/api/attendance/clockin`                   | `{ "employeeId": "EMP001" }` | Record a clock-in          |
+| `POST` | `/api/attendance/clockout`                  | `{ "employeeId": "EMP001" }` | Record a clock-out         |
+| `GET`  | `/api/attendance/history?employeeId=EMP001` | —                            | Full history, newest first |
+
+### Response shape (all endpoints)
+
+```json
+{
+  "id": 1,
+  "employeeId": "EMP001",
+  "clockInUtc": "2026-04-27T07:02:14.123Z",
+  "clockOutUtc": "2026-04-27T15:58:09.456Z",
+  "durationMinutes": 535.9,
+  "sourceIp": "::1"
+}
 ```
-dotnet work clock/
-├── WorkClock.Api/
-│   ├── Controllers/
-│   │   ├── ClockController.cs     # POST /in, POST /out, GET /status, GET /history
-│   │   └── Dtos.cs                # ClockRequest, ClockResponse records
-│   ├── Data/
-│   │   └── AppDbContext.cs        # EF Core context + model configuration
-│   ├── Exceptions/
-│   │   └── TimeServiceException.cs
-│   ├── Migrations/                # EF Core migrations (auto-applied on startup)
-│   ├── Models/
-│   │   └── AttendanceRecord.cs    # Database entity
-│   ├── Properties/
-│   │   └── launchSettings.json    # Sets ASPNETCORE_ENVIRONMENT=Development
-│   ├── Services/
-│   │   ├── ITimeService.cs
-│   │   └── TimeService.cs         # Calls timeapi.io, converts to UTC
-│   ├── appsettings.json
-│   └── Program.cs
-├── WorkClock.Tests/
-│   ├── Controllers/
-│   │   └── ClockControllerTests.cs
-│   └── Services/
-│       └── TimeServiceTests.cs
-└── WorkClock.sln
+
+### Error codes
+
+| HTTP                      | Cause                                             |
+| ------------------------- | ------------------------------------------------- |
+| `400 Bad Request`         | Clock-out attempted with no active clock-in today |
+| `409 Conflict`            | Clock-in attempted when already clocked in today  |
+| `503 Service Unavailable` | External time API is unreachable                  |
+
+---
+
+## Design Decisions
+
+### Why UTC in the database
+
+Storing local (wall-clock) time is a persistent source of bugs:
+
+- **DST transitions** make certain times ambiguous or non-existent (e.g., `02:30` on a spring-forward night).
+- **Multi-timezone employees** produce data that cannot be compared without knowing each record's origin timezone.
+- **Timezone rule changes** (governments do change DST rules) silently corrupt historical records stored in local time.
+
+UTC is a monotonically increasing, timezone-free reference. Both `ClockIn` and `ClockOut` are stored as `datetime2` UTC. The React frontend converts to the browser's local timezone at display time using `Date.prototype.toLocaleString()`, so every user sees their own local clock while the database stays unambiguous.
+
+### How we handle external API availability
+
+The authoritative time is fetched from `timeapi.io` on every clock-in and clock-out. Because this is an external HTTP call it can fail, and we treat it as a hard requirement.
+
+| Layer                                | Mechanism                                                                                                                                                                                           |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HttpClientFactory + 10 s timeout** | Prevents socket exhaustion and hanging requests                                                                                                                                                     |
+| **`TimeServiceException` boundary**  | All network/parse failures are caught in `TimeService`, logged at `Error` level with the raw response body for diagnostics, and re-thrown as a typed exception                                      |
+| **Controller → 503**                 | `AttendanceController` catches `TimeServiceException` and returns `503 Service Unavailable` with a user-friendly JSON error body                                                                    |
+| **React loading state**              | Buttons are disabled and an animated note ("Fetching authoritative time from external API…") is shown while the request is in flight, setting the right latency expectation                         |
+| **Red error banner**                 | A 503 or any non-OK response surfaces as a dismissing banner in the UI — no silent failures                                                                                                         |
+| **No silent fallback**               | We deliberately do **not** fall back to `DateTime.UtcNow`. Falling back would mask failures and could allow time manipulation. If the authoritative source is down, the action is cleanly rejected. |
+
+---
+
+## Database Schema
+
+```sql
+CREATE TABLE AttendanceRecords (
+    Id          INT           IDENTITY(1,1) PRIMARY KEY,
+    EmployeeId  NVARCHAR(100) NOT NULL,
+    ClockIn     DATETIME2     NULL,
+    ClockOut    DATETIME2     NULL,
+    SourceIp    NVARCHAR(45)  NULL
+);
+
+CREATE INDEX IX_AttendanceRecords_EmployeeId_ClockIn
+    ON AttendanceRecords (EmployeeId, ClockIn);
 ```
