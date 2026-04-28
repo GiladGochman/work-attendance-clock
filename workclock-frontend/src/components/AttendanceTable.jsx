@@ -1,9 +1,11 @@
 import React from 'react';
 
-function formatLocal(utcString) {
-  if (!utcString) return '—';
-  // The API returns UTC ISO strings. toLocaleString() converts to the browser's local timezone.
-  return new Date(utcString).toLocaleString(undefined, {
+function formatZurich(dateString) {
+  if (!dateString) return '—';
+  // The API returns Zurich local time tagged with 'Z' to prevent browser offset math.
+  // Display with timeZone:'UTC' so the value is shown as-is (no conversion applied).
+  return new Date(dateString).toLocaleString('de-CH', {
+    timeZone: 'UTC',
     dateStyle: 'medium',
     timeStyle: 'short',
   });
@@ -48,13 +50,13 @@ export default function AttendanceTable({ records, loading }) {
             <tbody className="divide-y divide-gray-50">
               {records.map((r) => {
                 const clockInDate = r.clockInUtc
-                  ? new Date(r.clockInUtc).toLocaleDateString(undefined, { dateStyle: 'medium' })
+                  ? new Date(r.clockInUtc).toLocaleDateString('de-CH', { timeZone: 'UTC', dateStyle: 'medium' })
                   : '—';
                 const clockInTime = r.clockInUtc
-                  ? new Date(r.clockInUtc).toLocaleTimeString(undefined, { timeStyle: 'short' })
+                  ? new Date(r.clockInUtc).toLocaleTimeString('de-CH', { timeZone: 'UTC', timeStyle: 'short' })
                   : '—';
                 const clockOutTime = r.clockOutUtc
-                  ? new Date(r.clockOutUtc).toLocaleTimeString(undefined, { timeStyle: 'short' })
+                  ? new Date(r.clockOutUtc).toLocaleTimeString('de-CH', { timeZone: 'UTC', timeStyle: 'short' })
                   : null;
 
                 return (

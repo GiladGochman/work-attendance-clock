@@ -53,23 +53,23 @@ public class TimeServiceTests
     // ── Happy path ───────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetUtcNowAsync_ValidResponse_ReturnsCorrectUtcTime()
+    public async Task GetNowAsync_ValidResponse_ReturnsZurichLocalTime()
     {
-        // +02:00 offset → 19:00 UTC
+        // +02:00 offset → stores 21:00 as Zurich local time
         var factory = MakeFactory(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = JsonBody(new { date_time = "2026-04-26T21:00:00.000000+02:00" })
         });
         var sut = new TimeService(factory, NullLogger<TimeService>.Instance);
 
-        var result = await sut.GetUtcNowAsync();
+        var result = await sut.GetNowAsync();
 
         Assert.Equal(DateTimeKind.Utc, result.Kind);
-        Assert.Equal(new DateTime(2026, 4, 26, 19, 0, 0, DateTimeKind.Utc), result);
+        Assert.Equal(new DateTime(2026, 4, 26, 21, 0, 0, DateTimeKind.Utc), result);
     }
 
     [Fact]
-    public async Task GetUtcNowAsync_ZeroOffset_ReturnsTimeAsIs()
+    public async Task GetNowAsync_ZeroOffset_ReturnsLocalTimeDirectly()
     {
         var factory = MakeFactory(new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -77,7 +77,7 @@ public class TimeServiceTests
         });
         var sut = new TimeService(factory, NullLogger<TimeService>.Instance);
 
-        var result = await sut.GetUtcNowAsync();
+        var result = await sut.GetNowAsync();
 
         Assert.Equal(new DateTime(2026, 4, 26, 15, 30, 0, DateTimeKind.Utc), result);
     }
@@ -85,36 +85,36 @@ public class TimeServiceTests
     // ── Network / HTTP errors ─────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetUtcNowAsync_NetworkFailure_ThrowsTimeServiceException()
+    public async Task GetNowAsync_NetworkFailure_ThrowsTimeServiceException()
     {
         var factory = MakeThrowingFactory(new HttpRequestException("Network unreachable"));
         var sut = new TimeService(factory, NullLogger<TimeService>.Instance);
 
-        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetUtcNowAsync());
+        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetNowAsync());
     }
 
     [Fact]
-    public async Task GetUtcNowAsync_Timeout_ThrowsTimeServiceException()
+    public async Task GetNowAsync_Timeout_ThrowsTimeServiceException()
     {
         var factory = MakeThrowingFactory(new TaskCanceledException("Request timed out"));
         var sut = new TimeService(factory, NullLogger<TimeService>.Instance);
 
-        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetUtcNowAsync());
+        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetNowAsync());
     }
 
     [Fact]
-    public async Task GetUtcNowAsync_Non200StatusCode_ThrowsTimeServiceException()
+    public async Task GetNowAsync_Non200StatusCode_ThrowsTimeServiceException()
     {
         var factory = MakeFactory(new HttpResponseMessage(HttpStatusCode.InternalServerError));
         var sut = new TimeService(factory, NullLogger<TimeService>.Instance);
 
-        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetUtcNowAsync());
+        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetNowAsync());
     }
 
     // ── Malformed responses ───────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetUtcNowAsync_InvalidJson_ThrowsTimeServiceException()
+    public async Task GetNowAsync_InvalidJson_ThrowsTimeServiceException()
     {
         var factory = MakeFactory(new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -122,11 +122,11 @@ public class TimeServiceTests
         });
         var sut = new TimeService(factory, NullLogger<TimeService>.Instance);
 
-        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetUtcNowAsync());
+        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetNowAsync());
     }
 
     [Fact]
-    public async Task GetUtcNowAsync_MissingDateTimeField_ThrowsTimeServiceException()
+    public async Task GetNowAsync_MissingDateTimeField_ThrowsTimeServiceException()
     {
         var factory = MakeFactory(new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -134,11 +134,11 @@ public class TimeServiceTests
         });
         var sut = new TimeService(factory, NullLogger<TimeService>.Instance);
 
-        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetUtcNowAsync());
+        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetNowAsync());
     }
 
     [Fact]
-    public async Task GetUtcNowAsync_EmptyDateTimeField_ThrowsTimeServiceException()
+    public async Task GetNowAsync_EmptyDateTimeField_ThrowsTimeServiceException()
     {
         var factory = MakeFactory(new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -146,11 +146,11 @@ public class TimeServiceTests
         });
         var sut = new TimeService(factory, NullLogger<TimeService>.Instance);
 
-        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetUtcNowAsync());
+        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetNowAsync());
     }
 
     [Fact]
-    public async Task GetUtcNowAsync_UnparseableDateTimeValue_ThrowsTimeServiceException()
+    public async Task GetNowAsync_UnparseableDateTimeValue_ThrowsTimeServiceException()
     {
         var factory = MakeFactory(new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -158,6 +158,6 @@ public class TimeServiceTests
         });
         var sut = new TimeService(factory, NullLogger<TimeService>.Instance);
 
-        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetUtcNowAsync());
+        await Assert.ThrowsAsync<TimeServiceException>(() => sut.GetNowAsync());
     }
 }

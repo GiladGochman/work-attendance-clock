@@ -46,7 +46,7 @@ public class ClockControllerTests : IDisposable
     [Fact]
     public async Task ClockIn_Success_Creates_Record_Returns201()
     {
-        _timeService.Setup(s => s.GetUtcNowAsync()).ReturnsAsync(FakeUtcNow);
+        _timeService.Setup(s => s.GetNowAsync()).ReturnsAsync(FakeUtcNow);
 
         var result = await _sut.ClockIn(new ClockRequest("EMP001"));
 
@@ -72,7 +72,7 @@ public class ClockControllerTests : IDisposable
         var result = await _sut.ClockIn(new ClockRequest("EMP001"));
 
         Assert.IsType<ConflictObjectResult>(result);
-        _timeService.Verify(s => s.GetUtcNowAsync(), Times.Never);
+        _timeService.Verify(s => s.GetNowAsync(), Times.Never);
         Assert.Equal(1, await _db.AttendanceRecords.CountAsync()); // no extra record
     }
 
@@ -86,7 +86,7 @@ public class ClockControllerTests : IDisposable
     [Fact]
     public async Task ClockIn_TimeServiceDown_Returns503_And_NoRecordSaved()
     {
-        _timeService.Setup(s => s.GetUtcNowAsync())
+        _timeService.Setup(s => s.GetNowAsync())
                     .ThrowsAsync(new TimeServiceException("External time API unavailable."));
 
         var result = await _sut.ClockIn(new ClockRequest("EMP001"));
@@ -107,7 +107,7 @@ public class ClockControllerTests : IDisposable
             ClockOut   = FakeUtcNow.AddDays(-1).AddHours(8)
         });
         await _db.SaveChangesAsync();
-        _timeService.Setup(s => s.GetUtcNowAsync()).ReturnsAsync(FakeUtcNow);
+        _timeService.Setup(s => s.GetNowAsync()).ReturnsAsync(FakeUtcNow);
 
         var result = await _sut.ClockIn(new ClockRequest("EMP001"));
 
@@ -126,7 +126,7 @@ public class ClockControllerTests : IDisposable
             ClockIn    = FakeUtcNow.AddHours(-8)
         });
         await _db.SaveChangesAsync();
-        _timeService.Setup(s => s.GetUtcNowAsync()).ReturnsAsync(FakeUtcNow);
+        _timeService.Setup(s => s.GetNowAsync()).ReturnsAsync(FakeUtcNow);
 
         var result = await _sut.ClockOut(new ClockRequest("EMP001"));
 
@@ -166,7 +166,7 @@ public class ClockControllerTests : IDisposable
         var record = new AttendanceRecord { EmployeeId = "EMP001", ClockIn = FakeUtcNow.AddHours(-8) };
         _db.AttendanceRecords.Add(record);
         await _db.SaveChangesAsync();
-        _timeService.Setup(s => s.GetUtcNowAsync())
+        _timeService.Setup(s => s.GetNowAsync())
                     .ThrowsAsync(new TimeServiceException("External time API unavailable."));
 
         var result = await _sut.ClockOut(new ClockRequest("EMP001"));

@@ -34,7 +34,7 @@ public class ClockController(
         DateTime utcNow;
         try
         {
-            utcNow = await timeService.GetUtcNowAsync();
+            utcNow = await timeService.GetNowAsync();
         }
         catch (TimeServiceException ex)
         {
@@ -76,7 +76,7 @@ public class ClockController(
         DateTime utcNow;
         try
         {
-            utcNow = await timeService.GetUtcNowAsync();
+            utcNow = await timeService.GetNowAsync();
         }
         catch (TimeServiceException ex)
         {

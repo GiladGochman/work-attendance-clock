@@ -9,7 +9,7 @@ A full-stack attendance tracking system built with **React 18**, **ASP.NET Core 
 ```
 ┌────────────────────────┐     HTTP/JSON     ┌──────────────────────────┐
 │  React + Vite          │ ◄───────────────► │  ASP.NET Core 10 Web API │
-│  (localhost:5173)      │                   │  (localhost:7000)        │
+│  (localhost:5173)      │                   │  (localhost:5000)        │
 └────────────────────────┘                   └───────────┬──────────────┘
                                                          │ EF Core 8
                                                          ▼
@@ -38,6 +38,9 @@ WorkClock.sln
 │   ├── Services/           ITimeService.cs  TimeService.cs
 │   ├── Program.cs
 │   └── appsettings.json
+├── WorkClock.Tests/
+│   ├── Controllers/        ClockControllerTests.cs
+│   └── Services/           TimeServiceTests.cs
 └── workclock-frontend/
     ├── src/
     │   ├── components/     ClockControls.jsx  AttendanceTable.jsx
@@ -50,7 +53,7 @@ WorkClock.sln
 
 ---
 
-## Getting Started
+## First-Time Setup
 
 ### Prerequisites
 
@@ -72,7 +75,16 @@ Credentials: `sa` / `WorkClock@2024!`
 > If you have a local SQL Server instance, update the connection string in
 > `WorkClock.Api/appsettings.json` to point to it instead.
 
-### 2 — Run the API
+### 2 — Install frontend dependencies
+
+```bash
+cd workclock-frontend
+npm install
+```
+
+Only needed once (or after `package.json` changes).
+
+### 3 — Run the API
 
 ```bash
 cd WorkClock.Api
@@ -82,16 +94,60 @@ dotnet run
 On first start the API automatically applies the EF Core migration and creates the database.  
 Swagger UI → `https://localhost:5000/swagger`
 
-### 3 — Run the Frontend
+### 4 — Run the Frontend
 
 ```bash
 cd workclock-frontend
-npm install
 npm run dev
 ```
 
 Open **http://localhost:5173**.  
 Vite proxies `/api/*` to the ASP.NET Core backend — no manual CORS setup needed.
+
+---
+
+## Quick Start (already set up)
+
+If you have already run the setup steps above, starting the app only requires three commands (in separate terminals):
+
+```bash
+# Terminal 1 — database
+docker compose up -d
+
+# Terminal 2 — API
+cd WorkClock.Api && dotnet run
+
+# Terminal 3 — frontend
+cd workclock-frontend && npm run dev
+```
+
+Open **http://localhost:5173**.
+
+---
+
+## For Developers
+
+### Running the unit tests
+
+The test suite uses **xUnit** and covers the `TimeService` (mocked HTTP) and `ClockController` (EF Core in-memory database). No running database or external services are required.
+
+```bash
+# From the solution root
+dotnet test
+
+# With verbose output
+dotnet test --logger "console;verbosity=detailed"
+
+# Run only a specific test project
+dotnet test WorkClock.Tests/WorkClock.Tests.csproj
+```
+
+All 30 tests should pass. The suite is split into:
+
+| File | Tests | What it covers |
+| ---- | ----- | -------------- |
+| `WorkClock.Tests/Services/TimeServiceTests.cs` | 12 | HTTP success, network errors, malformed JSON responses |
+| `WorkClock.Tests/Controllers/ClockControllerTests.cs` | 18 | Clock-in/out business rules, status, history, 400/409/503 responses |
 
 ---
 
@@ -109,12 +165,15 @@ Vite proxies `/api/*` to the ASP.NET Core backend — no manual CORS setup neede
 {
   "id": 1,
   "employeeId": "EMP001",
-  "clockInUtc": "2026-04-27T07:02:14.123Z",
-  "clockOutUtc": "2026-04-27T15:58:09.456Z",
+  "clockInUtc": "2026-04-27T09:02:14.123Z",
+  "clockOutUtc": "2026-04-27T17:58:09.456Z",
   "durationMinutes": 535.9,
   "sourceIp": "::1"
 }
 ```
+
+> **Note on timestamps:** values are Zurich local time (Europe/Zurich). The trailing `Z` is a
+> serialization artifact; the frontend always displays them without offset conversion.
 
 ### Error codes
 
@@ -128,15 +187,12 @@ Vite proxies `/api/*` to the ASP.NET Core backend — no manual CORS setup neede
 
 ## Design Decisions
 
-### Why UTC in the database
+### Time storage
 
-Storing local (wall-clock) time is a persistent source of bugs:
-
-- **DST transitions** make certain times ambiguous or non-existent (e.g., `02:30` on a spring-forward night).
-- **Multi-timezone employees** produce data that cannot be compared without knowing each record's origin timezone.
-- **Timezone rule changes** (governments do change DST rules) silently corrupt historical records stored in local time.
-
-UTC is a monotonically increasing, timezone-free reference. Both `ClockIn` and `ClockOut` are stored as `datetime2` UTC. The React frontend converts to the browser's local timezone at display time using `Date.prototype.toLocaleString()`, so every user sees their own local clock while the database stays unambiguous.
+All timestamps are stored as Zurich local time (`Europe/Zurich`). The authoritative time is
+fetched from `timeapi.io` on every clock-in and clock-out; the Zurich wall-clock value is stored
+directly in the `datetime2` column. The frontend always renders times as-is without applying any
+browser timezone offset, so what you see matches what is in the database.
 
 ### How we handle external API availability
 

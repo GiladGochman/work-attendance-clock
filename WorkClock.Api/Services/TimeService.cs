@@ -22,7 +22,7 @@ public class TimeService(IHttpClientFactory httpClientFactory, ILogger<TimeServi
     private const string ClientName = "TimeApi";
     private const string TimeZone  = "Europe/Zurich";
 
-    public async Task<DateTime> GetUtcNowAsync()
+    public async Task<DateTime> GetNowAsync()
     {
         HttpClient client;
         HttpResponseMessage response;
@@ -66,6 +66,9 @@ public class TimeService(IHttpClientFactory httpClientFactory, ILogger<TimeServi
             throw new TimeServiceException($"Could not parse the date/time value returned by the external time service: '{dto.DateTime}'.");
         }
 
-        return parsed.UtcDateTime; // Kind == DateTimeKind.Utc
+        // Return the Zurich local time (not UTC). SpecifyKind(Utc) is used so
+        // ASP.NET Core's JSON serializer emits a trailing 'Z', which prevents browsers
+        // from applying their own timezone offset when parsing the value.
+        return DateTime.SpecifyKind(parsed.DateTime, DateTimeKind.Utc);
     }
 }

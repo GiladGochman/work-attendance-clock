@@ -55,7 +55,7 @@ public class AttendanceController(AppDbContext db, ITimeService timeService, ILo
         DateTime utcNow;
         try
         {
-            utcNow = await timeService.GetUtcNowAsync();
+            utcNow = await timeService.GetNowAsync();
         }
         catch (TimeServiceException ex)
         {
@@ -108,7 +108,7 @@ public class AttendanceController(AppDbContext db, ITimeService timeService, ILo
         DateTime utcNow;
         try
         {
-            utcNow = await timeService.GetUtcNowAsync();
+            utcNow = await timeService.GetNowAsync();
         }
         catch (TimeServiceException ex)
         {
