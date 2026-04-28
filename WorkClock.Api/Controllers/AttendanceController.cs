@@ -22,8 +22,10 @@ public class AttendanceController(AppDbContext db, ITimeService timeService, ILo
     {
         Id              = r.Id,
         EmployeeId      = r.EmployeeId,
-        ClockInUtc      = r.ClockIn,
-        ClockOutUtc     = r.ClockOut,
+        // EF Core reads datetime2 columns back with Kind=Unspecified; re-apply Utc so
+        // System.Text.Json serialises with a trailing 'Z' and browsers don't shift the value.
+        ClockInUtc      = r.ClockIn  is { } ci ? DateTime.SpecifyKind(ci,  DateTimeKind.Utc) : null,
+        ClockOutUtc     = r.ClockOut is { } co ? DateTime.SpecifyKind(co, DateTimeKind.Utc) : null,
         DurationMinutes = r.ClockIn.HasValue && r.ClockOut.HasValue
             ? (r.ClockOut.Value - r.ClockIn.Value).TotalMinutes
             : null,
